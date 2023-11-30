@@ -1,4 +1,4 @@
-use rand::seq::SliceRandom;
+// use rand::seq::SliceRandom;
 use std::arch::asm;
 use std::arch::x86_64::*;
 use rand::Rng;
@@ -124,6 +124,7 @@ pub fn read_memory_byte(target_idx: usize, is_attack: &Vec<bool>, arr1: &Vec<u8>
 }
 
 
+/*
 struct HackData {
   arr1: [u8; 16],
   pad1: [u8; 64],
@@ -134,10 +135,12 @@ struct HackData {
   arr1_len: usize, 
   pad4: [u8; 64],
 }
+*/
 
 
 fn main() {
 
+/*
     let mut hackdata = HackData {
       arr1: [17, 8, 24, 14, 3, 28, 6, 19, 9, 25, 11, 30, 5, 20, 16, 2],
       pad1: [0; 64],
@@ -148,6 +151,7 @@ fn main() {
       arr1_len: 16,
       pad4: [0; 64],
     };
+*/
 
     // let mut arr1: [u8; 16] = [17, 8, 24, 14, 3, 28, 6, 19, 9, 25, 11, 30, 5, 20, 16, 2];
     let mut arr1 = vec! [17u8, 8, 24, 14, 3, 28, 6, 19, 9, 25, 11, 30, 5, 20, 16, 2];
