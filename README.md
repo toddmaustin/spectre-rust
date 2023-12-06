@@ -11,6 +11,8 @@ The developers of this attack PoC are big fans of Rust, it is truly a security-m
 
 This proof of concept attack has successfully run on a 13th-gen Core i7-13700H on Ubuntu 20.04 inside VirtualBox 7.0 on Windows 11. Built with rustc compiler version 1.73.0.
 
+Spectre V1 is a difficult to stop buffer overread attack that plagues many of today's high-performance microprocessors, to learn more about this microarchitectural attack, please check out the [wiki page](https://en.wikipedia.org/wiki/Spectre_(security_vulnerability)).
+
 ## Prerequisites
 
 You'll need to have the following:
@@ -83,7 +85,30 @@ Final stats: 79.67% correct guesses. (239 out of 300 letters).
   (Note: random guessing of the string would have an accuracy of roughly: 0.39%)
 ```
 This experiment worked and was able to achieve a 79.67% accuracy at accessing the entries in array SECRET[] from the bounds-checked Rust array ARR1[]. Also note that the success rate of just guessing letters would be no higher than 0.39%, so any accuracy much great than 1% indicates that Spectre V1 is working on the system running the attack program.
+
+Note that there are many ways for this attack to fail: i) your system mitigates Spectre V1 (unlikely), ii) memory alignments do not allow the attack PoC to properly flush the cache and create enough delay for a successful speculative execution attack, or iii) system background executions are interferring with the branch-predictor and cache side channels. The attack code will detect if the attack is not working (with a low secret guess rate) and stop early, which will look like this:
 ```
+    Finished dev [optimized + debuginfo] target(s) in 0.00s
+     Running `target/debug/rust-spectre`
+Distance to secret array = 46825600727508 (0x55677891dad0 -> 0x7ffde7de14a4)
+Running Spectre V1 attack tests...
+Char: '~', Score: 273206, Sum: 166
+Char: '~', Score: 245110, Sum: 0
+Char: '~', Score: 249758, Sum: 166
+ .
+ .
+ .
+Char: '~', Score: 257746, Sum: 0
+Char: '~', Score: 250570, Sum: 166
+Char: '/', Score: 260254, Sum: 0
+Char: '~', Score: 235916, Sum: 166
+Char: '~', Score: 228660, Sum: 0
+Guessed secret = `~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~A~~~~~~~~,~~~~,A~~~~~~~~~/~~'
+NOTE: Required to stop dead code removal: Sum: 0
+This target mitigates Spectre V1 or memory alignment does not permit the attack, rebuild and rerun to attempt again...
+```
+
+If this occurs, rebuild and rerun the program 20 more times, if you don't see any successful infiltration of secret data, then the attack will not work on you system.
 
 ## Licensing Details
 
