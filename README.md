@@ -110,6 +110,11 @@ This target mitigates Spectre V1 or memory alignment does not permit the attack,
 
 If this occurs, rebuild and rerun the program 20 more times, if you don't see any successful infiltration of secret data, then the attack will not work on you system.
 
+## I'm unconvinced that this attack is actually working!
+
+Feeling skeptical? Not sure if we are just grabbing the data from the wrong string? If so, look for the comment with "CONFIRMING EXPERIMENT" and follow the directions to implement a confirming experiment. In this experiment, the Spectre V1 attack gadget doesn't communicate the output of SECRET[], but rather each letter of SECRET[] plus 1, so the SECRET string of "Hello World Hello" becomes "Ifmmp!Xpsme!Ifmmp". Make the changes it asks for and rerun the experiment, if you ever see "Ifmmp!Xpsme!Ifmmp" in the output, Spectre V1 must be working. "Ifmmp!Xpsme!Ifmmp" is not stored anywhere in memory, it only exists in the mispeculation stream of the function fetch_function(). That is plainly due to a Spectre V1 leakage!
+
+
 ## Licensing Details
 
 This attack code is made available for use under the [Apache License, version 2.0](https://www.apache.org/licenses/LICENSE-2.0) 
