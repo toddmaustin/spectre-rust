@@ -94,6 +94,15 @@ pub fn fetch_function(arr1: &Vec<u8>, arr1_len: &mut usize, arr2: &[u8], idx: us
       // to see check letter-associated line got referenced, and that will
       // COMMUNICATE out the value of the ILLEGALLY read rust array value
       return arr2[val * 512]
+
+      // CONFIRMING EXPERIMENT:
+      // Not a believer that the Spectre V1 attack is not actually working?
+      // Then replace the line above with the line commented out below, this
+      // will emit a string that is nowhere in memory, that looks as follows:
+      // Hello World Hello -> "Ifmmp!Xpsme!Ifmmp", that string only exists in the
+      // mispeculation stream :), if you see it on the output, that has to be
+      // Spectre V1 working!
+      // return arr2[(val+1) * 512]
     }
 
     // quick note, while we are doing "stupid microarchitecture tricks" here,
