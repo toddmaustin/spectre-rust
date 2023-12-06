@@ -118,7 +118,7 @@ This attack code is made available for use under the [Apache License, version 2.
 
 - Christopher Felix, University of Michigan
 - Donayam Benti, University of Michigan
-- Todd Austin, University of Michigan and Agita Labs
+- [Todd Austin](https://www.linkedin.com/in/prof-todd-austin/), University of Michigan and Agita Labs, [@ToddMAustin](https://twitter.com/ToddMAustin)
 
 And, thanks to the respective authors of the C++ Spectre V1 attacks that inspired this work.
 
