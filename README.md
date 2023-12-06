@@ -37,8 +37,8 @@ cargo run
 
 Spectre attacks occur in the mispeculation stream of a high-performance processor, which has a lot of failure modes, so you may have to work through some adjustments to get the attack to work on your system. But when the attack is working it will look something like this:
 ```
-    Finished dev [optimized + debuginfo] target(s) in 0.01s
-     Running `target/debug/rust-spectre`
+Finished dev [optimized + debuginfo] target(s) in 0.01s
+Running `target/debug/rust-spectre`
 Distance to secret array = 46121323748004 (0x560a203f3ad0 -> 0x7ffc955d9574)
 Running Spectre V1 attack tests...
 Char: '~', Score: 284272, Sum: 166
@@ -88,8 +88,8 @@ This experiment worked and was able to achieve a 79.67% accuracy at accessing th
 
 Note that there are many ways for this attack to fail: i) your system mitigates Spectre V1 (unlikely), ii) memory alignments do not allow the attack PoC to properly flush the cache and create enough delay for a successful speculative execution attack, or iii) system background executions are interferring with the branch-predictor and cache side channels. The attack code will detect if the attack is not working (with a low secret guess rate) and stop early, which will look like this:
 ```
-    Finished dev [optimized + debuginfo] target(s) in 0.00s
-     Running `target/debug/rust-spectre`
+Finished dev [optimized + debuginfo] target(s) in 0.00s
+Running `target/debug/rust-spectre`
 Distance to secret array = 46825600727508 (0x55677891dad0 -> 0x7ffde7de14a4)
 Running Spectre V1 attack tests...
 Char: '~', Score: 273206, Sum: 166
