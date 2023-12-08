@@ -247,9 +247,9 @@ fn main()
     // legal array to access
     let arr1 = vec! [17u8, 8, 24, 14, 3, 28, 6, 19, 9, 25, 11, 30, 5, 20, 16, 2];
     // illegal array to access: "Hello World Hello  ..."
-    let secret: [u8; 60] = [73, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32, 72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32, 72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 32, 72, 101, 108, 108, 111, 32, 32, 32 ];
-    // manipulate this to get potentiall better results
-    let secret_start:usize = 0;
+    let secret: &'static str = "Hello World Hello   Hello World Hello   Hello World Hello   ";
+    // manipulate this to get potentially better results
+    let secret_start:usize = 00;
 
     // results array, the read_memory_byte function will put CUMULATIVE read
     // latency counts into the results array, thus the entry with the lowest
@@ -354,7 +354,7 @@ fn main()
       // compute how accurate are our guesses
       total_letters += guessed_secret.len();
       for i in 0..guessed_secret.len() {
-        if secret[i] == guessed_secret.as_bytes()[i]
+        if secret.as_bytes()[i] == guessed_secret.as_bytes()[i]
         {
           correct_letters += 1;
         }
